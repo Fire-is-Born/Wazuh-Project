@@ -627,3 +627,64 @@ Source Network Address: 127.0.0.1
 
 Event ID `4624` gives us much more than just knowing a login was successful. We can use it to see **who logged in, how they logged in, where the login came from, and link the login to other activity during the same session**.
 
+
+### Investigating Event ID 4732
+
+Lastly, I searched for **Security Event ID `4732`**:
+
+> **A member was added to a security-enabled local group.**
+
+This returned two events. Looking at one of them showed:
+
+```text
+Subject:
+    Account Name:    MyDFIR
+    Account Domain:  DESKTOP-J7KDPKR
+
+Member:
+    Security ID:     S-1-5-21-2046687144-963757887-2302240994-1002
+    Account Name:    -
+
+Group:
+    Security ID:     S-1-5-32-544
+    Group Name:      Administrators
+    Group Domain:    Builtin
+```
+
+The **Subject** shows that `MyDFIR` performed the action, while the **Group** section shows that a member was added to the local `Administrators` group.
+
+However, the `Member` section does not provide an account name:
+
+```text
+Account Name: -
+```
+
+Instead, we only have the SID:
+
+```text
+S-1-5-21-2046687144-963757887-2302240994-1002
+```
+
+This is a good example of why understanding SIDs and RIDs is useful during an investigation. Logs will not always provide a convenient username, so sometimes we need to correlate the SID with other events to work out which account it belongs to.
+
+I copied the SID, placed it in quotes and searched for it in Wazuh:
+
+```text
+"S-1-5-21-2046687144-963757887-2302240994-1002"
+```
+
+Other events containing this SID identified the account as:
+
+```text
+student1
+```
+
+We can therefore determine that the event represents:
+
+```text
+MyDFIR → added student1 → local Administrators group
+```
+
+This also links back to the earlier Event ID `4720`, where `student1` was created with the same SID ending in RID `1002`.
+
+Being able to correlate identifiers like SIDs across different events is useful when a single log does not contain all the information needed to understand what happened.
