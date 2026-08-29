@@ -688,3 +688,169 @@ MyDFIR → added student1 → local Administrators group
 This also links back to the earlier Event ID `4720`, where `student1` was created with the same SID ending in RID `1002`.
 
 Being able to correlate identifiers like SIDs across different events is useful when a single log does not contain all the information needed to understand what happened.
+
+
+## Generating and Investigating Linux SSH Telemetry
+
+I then moved over to the Ubuntu endpoint to generate some Linux authentication telemetry.
+
+From the Windows VM, I first attempted to SSH into the Ubuntu machine using the fake username `fakeuser` and incorrect passwords. I then made a successful SSH connection using the legitimate `mydfir` account.
+
+<img width="908" height="446" alt="image" src="https://github.com/user-attachments/assets/04a3e991-6630-4276-8e48-3ba159e305ee" />
+
+
+<img width="926" height="605" alt="image" src="https://github.com/user-attachments/assets/f5e55bb5-cb55-4975-853e-39c4e30f5f20" />
+
+
+
+### Investigating Failed SSH Attempts
+
+Back in Wazuh, I removed the filters from the previous Windows investigation and searched for:
+
+```text
+"fakeuser"
+```
+
+This returned six events. One showed:
+
+
+<img width="1819" height="817" alt="image" src="https://github.com/user-attachments/assets/3c20cef6-ebc7-4073-a951-4947c7f05230" />
+
+```text
+Aug 29 19:19:07 ubuntu sshd[2302]:
+Connection reset by invalid user fakeuser 192.168.216.134 port 52357 [preauth]
+```
+
+Another showed the failed authentication attempt:
+
+```text
+Aug 29 19:19:00 ubuntu sshd[2302]:
+Failed password for invalid user fakeuser from 192.168.216.134 port 52357 ssh2
+```
+
+From these logs we can identify the attempted username (`fakeuser`), source IP (`192.168.216.134`), source port (`52357`) and the fact that authentication failed.
+
+### Investigating a Successful SSH Login
+
+I then searched for:
+
+```text
+mydfir AND accepted
+```
+
+<img width="1908" height="1206" alt="image" src="https://github.com/user-attachments/assets/fe31c464-2db0-46d7-8dee-05e9afa8b721" />
+
+This returned the successful authentication event:
+
+```text
+Aug 29 19:20:50 ubuntu sshd[2304]:
+Accepted password for mydfir from 192.168.216.134 port 52358 ssh2
+```
+
+This confirms that `mydfir` successfully authenticated over SSH from the Windows VM at `192.168.216.134`.
+
+Searching for:
+
+```text
+mydfir AND session
+```
+
+showed the creation of the user's session:
+
+```text
+Aug 29 19:20:50 ubuntu systemd-logind[876]:
+New session 2 of user mydfir.
+```
+
+This was followed by:
+
+```text
+Aug 29 19:20:51 ubuntu systemd[1]:
+Started Session 2 of User mydfir.
+```
+
+The successful SSH login has therefore resulted in **session 2** being created for `mydfir`. This gives us another useful value to correlate against other telemetry generated while the user is logged in.
+
+### Tracking the SSH Session
+
+When the SSH connection was closed, Wazuh recorded:
+
+```text
+Aug 29 19:38:45 ubuntu sshd[2304]:
+pam_unix(sshd:session): session closed for user mydfir
+```
+
+This event does not directly state `Session 2`, but other information can still be used for correlation. For example, `sshd[2304]` is the same SSH process seen when the session was opened:
+
+```text
+Aug 29 19:20:50 ubuntu sshd[2304]:
+pam_unix(sshd:session): session opened for user mydfir(uid=1000) by (uid=0)
+```
+
+This allows activity associated with the same SSH process to be connected during an investigation.
+
+### Using Surrounding Events
+
+Another useful option in Wazuh is **View surrounding documents**. This allows events immediately before and after an interesting event to be examined without having to know exactly what to search for.
+
+I took note of the timestamp around the session closure:
+
+```text
+@timestamp
+Aug 29, 2026 @ 20:38:56.925
+```
+
+Looking at the surrounding events revealed:
+
+```text
+Aug 29 19:38:55 ubuntu systemd[2308]:
+pam_unix(systemd-user:session): session closed for user mydfir
+```
+
+<img width="1987" height="699" alt="image" src="https://github.com/user-attachments/assets/4f3df6dd-2eac-44fb-a24b-2f1df74093e8" />
+
+and:
+
+```text
+Aug 29 19:38:55 ubuntu systemd[1]:
+user@1000.service: Deactivated successfully.
+```
+
+<img width="2522" height="644" alt="image" src="https://github.com/user-attachments/assets/0b38887e-9313-45d0-9ac4-4a0e7a8e4f2c" />
+
+
+
+By correlating the authentication, session creation and session closure events, I can now establish roughly when the SSH session began and ended:
+
+```text
+19:20:50  SSH authentication accepted for mydfir
+    ↓
+19:20:50  SSH/PAM session opened
+    ↓
+19:20:50  systemd-logind creates Session 2
+    ↓
+19:20:51  Session 2 starts
+    ↓
+           User activity
+    ↓
+19:38:45  SSH/PAM session closed
+    ↓
+19:38:55  systemd user session closes
+    ↓
+19:38:55  user@1000.service deactivated
+```
+
+This demonstrates how multiple Linux log sources can be correlated to reconstruct a user's SSH activity rather than relying on a single event.
+
+
+
+
+
+
+
+
+
+
+
+
+
