@@ -300,7 +300,174 @@ At this stage, the lab consists of a central Wazuh server monitoring both Window
    Sysmon Operational Log       /var/log/syslog
 ```
 
-Both endpoints are successfully communicating with Wazuh and providing Sysmon telemetry. This gives the lab considerably greater endpoint visibility and provides a foundation for developing detections and investigating simulated attacks later in the project.
+Both endpoints are successfully communicating with Wazuh and providing Sysmon telemetry. This gives the lab considerably greater endpoint visibility and provides a foundation for developing detections and investigating simulated attacks.
+
+
+## Generating and Investigating Windows Security Events
+
+With Windows telemetry successfully reaching Wazuh, I generated some activity on the Windows endpoint to produce events that could be investigated.
+
+I opened **Command Prompt as Administrator** and ran several basic enumeration commands:
+
+```cmd
+whoami
+ipconfig /all
+net user
+net localgroup administrators
+```
+
+These commands provide information about the current user, network configuration, local user accounts and members of the local Administrators group.
+
+### Modifying Local Accounts
+
+The built-in Guest account is disabled by default on Windows. I enabled it using:
+
+```cmd
+net user guest /active:yes
+```
+
+I then changed the Guest account password:
+
+```cmd
+net user guest MYDFIRPASS
+```
+
+A new local user named `student1` was then created:
+
+```cmd
+net user student1 password /add
+```
+
+The account was added to the local Administrators group:
+
+```cmd
+net localgroup administrators student1 /add
+```
+
+I verified the group membership using:
+
+```cmd
+net localgroup administrators
+```
+
+<img width="883" height="383" alt="image" src="https://github.com/user-attachments/assets/e7bc1290-e3a8-4202-8f17-86a3b0d2199c" />
+
+Finally, the account was deleted:
+
+```cmd
+net user student1 /delete
+```
+
+These actions provide useful test activity because account creation, deletion and changes to privileged group membership are important events for security monitoring.
+
+## Investigating the Activity in Wazuh
+
+I returned to Wazuh and filtered the events using the Windows agent:
+
+```text
+agent.name: MyDFIR-Windows
+```
+
+The time range was changed to **Last 3 hours** to focus on the recently generated activity.
+
+One of the events contained:
+
+```text
+data.win.system.eventID: 4726
+```
+
+<img width="1984" height="873" alt="image" src="https://github.com/user-attachments/assets/939da546-6052-4d73-a148-882aebe985ed" />
+
+Microsoft Windows Security Event ID `4726` means:
+
+> **A user account was deleted.**
+
+The same information could be seen directly within Wazuh under:
+
+```text
+data.win.system.message
+```
+
+The event contained:
+
+```text
+A user account was deleted.
+
+Subject:
+    Security ID:     S-1-5-21-2046687144-963757887-2302240994-1001
+    Account Name:    MyDFIR
+    Account Domain:  DESKTOP-J7KDPKR
+    Logon ID:        0xC0832
+
+Target Account:
+    Security ID:     S-1-5-21-2046687144-963757887-2302240994-1002
+    Account Name:    student1
+    Account Domain:  DESKTOP-J7KDPKR
+```
+
+### Understanding Subject and Target
+
+An important part of analysing Windows Security events is distinguishing between the **Subject** and the **Target Account**.
+
+The **Subject** generally identifies the security principal responsible for performing the action.
+
+In this event:
+
+```text
+Account Name:    MyDFIR
+Account Domain:  DESKTOP-J7KDPKR
+```
+
+This tells us that the `MyDFIR` account on `DESKTOP-J7KDPKR` performed the account deletion.
+
+The **Target Account** identifies the account that the action was performed against:
+
+```text
+Account Name:    student1
+Account Domain:  DESKTOP-J7KDPKR
+```
+
+Therefore, the event can be interpreted as:
+
+> The `MyDFIR` account on `DESKTOP-J7KDPKR` deleted the local `student1` account on `DESKTOP-J7KDPKR`.
+
+## Security Identifiers (SIDs)
+
+Windows uses a **Security Identifier (SID)** to uniquely identify security principals such as users and groups.
+
+For example, the deleted `student1` account had the SID:
+
+```text
+S-1-5-21-2046687144-963757887-2302240994-1002
+```
+
+The final value is the **Relative Identifier (RID)**:
+
+```text
+1002
+```
+
+The preceding portion identifies the authority/domain context, while the RID uniquely identifies the account relative to that SID authority. This is why two local accounts on the same Windows installation will share much of their SID but have different values at the end.
+
+For example:
+
+```text
+MyDFIR
+S-1-5-21-2046687144-963757887-2302240994-1001
+                                              └─ RID 1001
+
+student1
+S-1-5-21-2046687144-963757887-2302240994-1002
+                                              └─ RID 1002
+```
+
+Windows also has **well-known SIDs**. These identify standard accounts and groups whose identifiers remain consistent across Windows installations. Examples include principals such as SYSTEM and built-in groups.
+
+More information on Windows SIDs:
+
+https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers
+
+
 
 
 
