@@ -873,11 +873,93 @@ This gives a simple count of failed Windows logon events within the selected tim
 
 Using a metric like this makes it easy to quickly see whether failed authentication activity is increasing without having to manually search through individual events.
 
+### Account Management Activity
+
+I then created another dashboard visualisation to monitor important **Windows account and local group management events**.
+
+The following query was used:
+
+```text
+data.win.system.eventID: ("4720" OR "4722" OR "4723" OR "4724" OR "4725" OR "4726" OR "4732" OR "4733" OR "4738")
+```
+
+These Event IDs cover activity such as:
+
+| Event ID | Activity |
+|---|---|
+| `4720` | User account created |
+| `4722` | User account enabled |
+| `4723` | Attempt made to change an account's password |
+| `4724` | Attempt made to reset an account's password |
+| `4725` | User account disabled |
+| `4726` | User account deleted |
+| `4732` | Member added to a security-enabled local group |
+| `4733` | Member removed from a security-enabled local group |
+| `4738` | User account changed |
+
+Monitoring these together gives a useful overview of account changes, particularly activity such as new accounts being created or users being added to privileged groups.
+
+### Creating the Line Chart
+
+I selected a **Line Chart** and configured:
+
+```text
+Y-axis:
+Metric → Count
+
+X-axis:
+Date Histogram
+Field → @timestamp
+Interval → 30 minutes
+```
+
+This plots the number of account-management events over time.
+
+I then added a **Split Series** using:
+
+```text
+Sub Aggregation → Terms
+Field → data.win.system.eventID
+```
+
+This separates the line by Event ID, making it possible to see which type of account-management activity occurred at each point in time.
+
+Initially, `data.win.system.eventID` was not available when selecting a field.
+
+Looking at the field in **Discover** showed:
+
+```text
+No cached mapping for this field.
+Refresh field list from the Dashboards
+Management > Index Patterns page
+```
+
+<img width="1076" height="544" alt="image" src="https://github.com/user-attachments/assets/b9899301-f997-4dde-b94c-ec3afa2f0872" />
+
+The events contained the field, but the dashboard's cached index-pattern field list had not been updated to include it.
+
+I followed the message and refreshed the field list from:
+
+**Dashboard Management → Index Patterns**
+
+After refreshing the index pattern, `data.win.system.eventID` became available for use in the visualisation.
+
+The resulting chart can now show both **when account-management activity occurred and which Windows Event IDs were generated**.
+
+
+<img width="2558" height="1233" alt="image" src="https://github.com/user-attachments/assets/40e7f3d3-e9a3-4546-ac18-ea0e7e553090" />
 
 
 
+<img width="2556" height="589" alt="image" src="https://github.com/user-attachments/assets/1ffbbde6-64d9-4152-a19e-3e0073bc2f4b" />
 
+### Account Management Chart
 
+The chart shows **Windows account-management activity over time**, split by Event ID. Each Event ID represents a different action, such as creating or deleting a user, enabling an account, or adding/removing users from local groups.
+
+The X-axis shows **when the events occurred** in 5-minute intervals, while the Y-axis shows **how many events occurred**. Splitting the data by Event ID makes it easier to quickly see what types of account changes were happening and when.
+
+This is useful because it gives an analyst a quick view of **account-related changes and unusual spikes in activity** without having to search through individual logs. Events such as unexpected account creation or changes to privileged group membership can then be investigated further.
 
 
 
