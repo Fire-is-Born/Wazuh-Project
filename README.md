@@ -843,6 +843,35 @@ By correlating the authentication, session creation and session closure events, 
 This demonstrates how multiple Linux log sources can be correlated to reconstruct a user's SSH activity rather than relying on a single event.
 
 
+## Creating a Wazuh Dashboard
+
+I then started building a dashboard to give a quick overview of useful security events.
+
+### Failed Windows Logons
+
+For the first visualisation, I focused on **Windows Security Event ID `4625`**:
+
+> **An account failed to log on.**
+
+To generate some test data, I deliberately entered the wrong password three times on the Windows VM.
+
+Back in Wazuh, I searched for:
+
+```text
+data.win.system.eventID: 4625
+```
+<img width="2024" height="863" alt="image" src="https://github.com/user-attachments/assets/eba0750e-404b-4df3-81e0-4f930fc356c9" />
+
+
+This returned three events, matching the three failed logon attempts.
+
+I then used the same query while creating a dashboard visualisation and selected a **Metric**.
+
+<img width="2556" height="1095" alt="image" src="https://github.com/user-attachments/assets/3ffa85fd-3c65-46b4-9a2b-4170fe473232" />
+
+This gives a simple count of failed Windows logon events within the selected time range.
+
+Using a metric like this makes it easy to quickly see whether failed authentication activity is increasing without having to manually search through individual events.
 
 
 
