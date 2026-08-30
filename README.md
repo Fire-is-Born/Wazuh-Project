@@ -961,7 +961,42 @@ The X-axis shows **when the events occurred** in 5-minute intervals, while the Y
 
 This is useful because it gives an analyst a quick view of **account-related changes and unusual spikes in activity** without having to search through individual logs. Events such as unexpected account creation or changes to privileged group membership can then be investigated further.
 
+### Failed SSH Authentication Table
+
+For the final dashboard panel, I created a **Data Table** to monitor failed SSH authentication attempts against the Linux endpoint.
+
+I first filtered the results to the Linux agent:
+
+```text
+agent.name IS MyDFIR-Linux
+```
+
+I then searched for:
+
+```text
+"Failed password"
+```
+
+This returned **3 failed SSH authentication events**.
+
+Rather than only displaying the total number of failures, I added several **Split Rows** buckets so that the table provides useful information about each attempt:
+
+```text
+Split Rows → Terms → agent.name
+Split Rows → Terms → timestamp
+Split Rows → Terms → data.srcuser
+Split Rows → Terms → data.dstuser
+Split Rows → Terms → data.srcip
+```
+
+These fields allow the table to show the **endpoint involved, when the attempt occurred, the username used and the source IP address**.
+
+`data.dstuser` did not contain any values for the current events, so I enabled **Show missing values**. I kept the field in the table so that destination-user information will still be displayed if future SSH events contain it.
 
 
+<img width="2553" height="892" alt="image" src="https://github.com/user-attachments/assets/75e1d412-101f-4881-9e67-9479cd5fc4a1" />
+
+
+This table is useful because failed SSH activity can be reviewed in one place rather than looking through each raw log individually. An analyst could quickly spot things such as **repeated failures from the same IP address or attempts against multiple usernames**, which may indicate password guessing or brute-force activity.
 
 
