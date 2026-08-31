@@ -1000,3 +1000,104 @@ These fields allow the table to show the **endpoint involved, when the attempt o
 This table is useful because failed SSH activity can be reviewed in one place rather than looking through each raw log individually. An analyst could quickly spot things such as **repeated failures from the same IP address or attempts against multiple usernames**, which may indicate password guessing or brute-force activity.
 
 
+## File Integrity Monitoring
+
+The next feature I wanted to test was **File Integrity Monitoring (FIM)**. Wazuh can monitor selected files and directories and alert when something changes, such as a file being created, modified or deleted.
+
+This could be particularly useful for monitoring sensitive files or important configuration directories where unexpected changes might be worth investigating.
+
+### Setting Up a Monitored Directory
+
+To test this, I created a new directory on the Windows VM:
+
+```text
+C:\CompanyData
+```
+
+<img width="1351" height="770" alt="image" src="https://github.com/user-attachments/assets/58dfd1c3-7416-479a-9f50-bcfc20e8bf61" />
+
+Inside the directory, I created a file called:
+
+```text
+payroll.txt
+```
+
+and added some test data:
+
+```text
+This is super secret, please do not touch.
+```
+
+The next step was to tell the Wazuh agent that I wanted this directory to be monitored.
+
+### Configuring FIM
+
+Looking through the Windows agent's `ossec.conf` file, I found that Wazuh already had real-time monitoring configured for several locations, including the Windows Startup directory:
+
+```xml
+<directories realtime="yes">%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs\Startup\</directories>
+```
+
+The `realtime="yes"` setting means Wazuh watches the directory for changes as they happen rather than relying only on periodic scans.
+
+Using the existing entry as a template, I added my `CompanyData` directory:
+
+```xml
+<directories realtime="yes">C:\CompanyData\</directories>
+```
+
+I then restarted the Wazuh agent so the new configuration would take effect.
+
+### Testing a File Modification
+
+With monitoring configured, I went to:
+
+**Agents Summary → Active → MyDFIR-Windows → File Integrity Monitoring**
+
+I then went back to the Windows VM, opened `payroll.txt`, added:
+
+```text
+123
+```
+
+and saved the file.
+
+Checking Wazuh again showed that the change had been detected.
+
+<img width="2549" height="641" alt="image" src="https://github.com/user-attachments/assets/29ee747e-e863-4f61-87b4-743f52532144" />
+
+The event identified the affected file:
+
+```text
+c:\companydata\payroll.txt
+```
+
+with the rule description:
+
+```text
+Integrity checksum changed.
+```
+
+So the real-time monitoring was working as expected and Wazuh was able to detect that the contents of the file had changed.
+
+### Testing File Deletion
+
+I also wanted to see what happened if the monitored file was removed completely, so I deleted `payroll.txt`.
+
+This generated another FIM event:
+
+```text
+syscheck.event: deleted
+rule.description: File deleted.
+```
+
+<img width="2559" height="629" alt="image" src="https://github.com/user-attachments/assets/47b4e19f-dc47-44f3-ab23-82a0f9d27d69" />
+
+This gives a simple example of how FIM could help during an investigation. Instead of only knowing that something suspicious happened on an endpoint, Wazuh can provide a record of changes being made to files that have been marked as important.
+
+There are quite a few more options available for configuring what FIM monitors and what information it collects, which are covered in the Wazuh documentation:
+
+https://documentation.wazuh.com/current/user-manual/capabilities/file-integrity/index.html
+
+
+
