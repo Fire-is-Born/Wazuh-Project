@@ -1099,5 +1099,113 @@ There are quite a few more options available for configuring what FIM monitors a
 
 https://documentation.wazuh.com/current/user-manual/capabilities/file-integrity/index.html
 
+### Configuring FIM on the Linux Endpoint
+
+After confirming that File Integrity Monitoring was working on Windows, I wanted to set up the same kind of monitoring on the Linux endpoint.
+
+I switched to the root user and created a directory under `/opt` to act as some fictional company data:
+
+```bash
+sudo su -
+mkdir /opt/company-data
+```
+
+I then created a simple test file containing some payroll data:
+
+```bash
+echo "payroll data" > /opt/company-data/test.txt
+```
+
+This left me with the following file to monitor:
+
+```text
+/opt/company-data/test.txt
+```
+
+### Adding the Directory to Wazuh
+
+To tell the Wazuh agent to watch this location, I opened its configuration file:
+
+```bash
+nano /var/ossec/etc/ossec.conf
+```
+
+Under the File Integrity Monitoring configuration, I added:
+
+```xml
+<directories realtime="yes">/opt/company-data</directories>
+```
+
+<img width="1073" height="512" alt="image" src="https://github.com/user-attachments/assets/163b6549-2e07-4515-92d4-cc5b3fcdd8c7" />
+
+
+As with the Windows endpoint, `realtime="yes"` means I want Wazuh to watch for changes as they happen.
+
+I then restarted the agent to apply the new configuration:
+
+```bash
+systemctl restart wazuh-agent.service
+```
+
+Back in Wazuh, I went to:
+
+**Agents Summary → Active → MyDFIR-Linux → File Integrity Monitoring**
+
+### Testing a File Modification
+
+To check that the monitoring was working, I edited the test file:
+
+```bash
+nano /opt/company-data/test.txt
+```
+
+I added `123` to the file and saved it.
+
+<img width="1099" height="594" alt="image" src="https://github.com/user-attachments/assets/1c2a602d-bf1a-49e5-a2fd-90faef803fbe" />
+
+
+Shortly afterwards, an event appeared in Wazuh for:
+
+```text
+/opt/company-data/test.txt
+```
+
+with:
+
+```text
+syscheck.event: modified
+rule.description: Integrity checksum changed.
+```
+
+<img width="2546" height="561" alt="image" src="https://github.com/user-attachments/assets/8b3c7122-5138-4918-9b32-bdbc05defaaf" />
+
+This showed that Wazuh had detected the change to the file in the new Linux monitoring location.
+
+### Testing File Deletion
+
+I then removed the file completely:
+
+```bash
+rm /opt/company-data/test.txt
+```
+
+This produced another event in Wazuh:
+
+<img width="2557" height="591" alt="image" src="https://github.com/user-attachments/assets/3dbf7a77-a1ec-4340-9a1c-582faa36ee3b" />
+
+```text
+syscheck.event: deleted
+rule.description: File deleted.
+```
+
+So at this point I had FIM working across both of my endpoints. Wazuh was able to detect modifications and deletions in the directories I had chosen to monitor on both **Windows and Linux**.
+
+This also shows that the underlying idea is much the same across operating systems: choose the files or directories that matter, configure the Wazuh agent to monitor them, and then investigate any unexpected changes that are reported.
+
+
+
+
+
+
 
 
